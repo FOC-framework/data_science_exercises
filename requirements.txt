@@ -1,0 +1,13 @@
+seaborn
+pandas
+scikit-learn
+flask==1.1.1
+requests==2.22.0
+uwsgi==2.0.18
+# opencv-python==4.1.1.26
+opencv-python==4.1.0.25
+dlib==19.17.0
+face_recognition==1.2.3
+face_recognition_models==0.3.0
+matplotlib==2.2.4
+pandas=0.25.3
