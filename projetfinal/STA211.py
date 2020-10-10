@@ -3,13 +3,16 @@ import numpy as np
 import gensim
 import pickle
 from minisom import MiniSom
+import matplotlib.pyplot as plt
+
+# from pylab import bone, pcolor, colorbar, plot, show
 
 # graphics
-from bokeh.io import output_file, show
-from bokeh.models import (BasicTicker, ColorBar, ColumnDataSource, LinearColorMapper, PrintfTickFormatter)
-from bokeh.plotting import figure
-from bokeh.sampledata.unemployment1948 import data
-from bokeh.transform import transform
+# from bokeh.io import output_file, show
+# from bokeh.models import (BasicTicker, ColorBar, ColumnDataSource, LinearColorMapper, PrintfTickFormatter)
+# from bokeh.plotting import figure
+# from bokeh.sampledata.unemployment1948 import data
+# from bokeh.transform import transform
 
 import tweet_cleaner
 
@@ -114,12 +117,36 @@ class STA211:
 
             pickle.dump(som, open(self.model_file_som, "wb"))
 
-    def micro_analysis(self, active):
-        data_pd = pd.read_csv(self.data_file_tweets, sep=',', skipinitialspace=True, )
-        document_vector_array = pickle.load(open(self.state_file_tweets_vector, "rb"))
-        som = pickle.load(open(self.model_file_som, "rb"))
-
+    def plotting_clusters(self, active):
         if active:
+            data_pd = pd.read_csv(self.data_file_tweets, sep=',', skipinitialspace=True, )
+            document_vector_array = pickle.load(open(self.state_file_tweets_vector, "rb"))
+            som = pickle.load(open(self.model_file_som, "rb"))
+
+            winner_coordinates = np.array([som.winner(x) for x in document_vector_array]).T
+            # with np.ravel_multi_index we convert the bidimensional
+            # coordinates to a monodimensional index
+            som_shape = (self.som_x_dim, self.som_y_dim)
+            cluster_index = np.ravel_multi_index(winner_coordinates, som_shape)
+
+            # plotting the clusters using the first 2 dimentions of the data
+            for c in np.unique(cluster_index):
+                plt.scatter(document_vector_array[cluster_index == c, 0],
+                            document_vector_array[cluster_index == c, 1], label='cluster=' + str(c), alpha=.7)
+
+            # plotting centroids
+            for centroid in som.get_weights():
+                plt.scatter(centroid[:, 0], centroid[:, 1], marker='x',
+                            s=80, linewidths=35, color='k', label='centroid')
+            plt.legend()
+            plt.show()
+
+    def micro_analysis(self, active):
+        if active:
+            data_pd = pd.read_csv(self.data_file_tweets, sep=',', skipinitialspace=True, )
+            document_vector_array = pickle.load(open(self.state_file_tweets_vector, "rb"))
+            som = pickle.load(open(self.model_file_som, "rb"))
+
             data_set = pd.DataFrame(data_pd)
 
             index = int(input('index = '))
@@ -132,46 +159,50 @@ class STA211:
                 print(document_vector_array[index])
                 index = int(input('index = '))
 
-    def heatmap(self):
-        output_file("unemploymemt.html")
+    def hierarchicalClustering(self, active):
+        if active:
+            import scipy.cluster.hierarchy as shc
 
-        data.Year = data.Year.astype(str)
-        data = data.set_index('Year')
-        data.drop('Annual', axis=1, inplace=True)
-        data.columns.name = 'Month'
+            document_vector_array = pickle.load(open(self.state_file_tweets_vector, "rb"))
+            som = pickle.load(open(self.model_file_som, "rb"))
+            winner_coordinates = np.array([som.winner(x) for x in document_vector_array])
+            weights = []
+            [weights.append(som.get_weights()[i][j]) for i in range(self.som_x_dim) for j in range(self.som_y_dim)]
+            weights = np.array(weights)
 
-        # reshape to 1D array or rates with a month and year for each row.
-        df = pd.DataFrame(data.stack(), columns=['rate']).reset_index()
+            # coordinates = som.get_euclidean_coordinates()
 
-        source = ColumnDataSource(df)
+            plt.figure(figsize=(10, 7))
+            plt.title("Neurones Dendrograms")
+            linkage = shc.linkage(weights, method='average')
+            dend = shc.dendrogram(linkage)
+            plt.show()
 
-        # this is the colormap from the original NYTimes plot
-        colors = ["#75968f", "#a5bab7", "#c9d9d3", "#e2e2e2", "#dfccce", "#ddb7b1", "#cc7878", "#933b41", "#550b1d"]
-        mapper = LinearColorMapper(palette=colors, low=df.rate.min(), high=df.rate.max())
+            numclust = 5
+            from scipy.cluster.hierarchy import fcluster
+            fl = fcluster(linkage, numclust, criterion='maxclust')
 
-        p = figure(plot_width=800, plot_height=300, title="US Unemployment 1948—2016",
-                   x_range=list(data.index), y_range=list(reversed(data.columns)),
-                   toolbar_location=None, tools="", x_axis_location="above")
+            print(fl.shape)
 
-        p.rect(x="Year", y="Month", width=1, height=1, source=source,
-               line_color=None, fill_color=transform('rate', mapper))
+            for c in range(numclust):
+                x_c = []
+                y_c = []
+                for x in range(self.som_x_dim):
+                    for y in range(self.som_y_dim):
+                        cluster_index = fl[x*10+y]
+                        if(cluster_index == c):
+                            x_c.append(x)
+                            y_c.append(y)
+                plt.scatter(x_c, y_c, label='cluster=' + str(c), alpha=.7)
 
-        color_bar = ColorBar(color_mapper=mapper, location=(0, 0),
-                             ticker=BasicTicker(desired_num_ticks=len(colors)),
-                             formatter=PrintfTickFormatter(format="%d%%"))
+            plt.legend()
+            plt.show()
 
-        p.add_layout(color_bar, 'right')
-
-        p.axis.axis_line_color = None
-        p.axis.major_tick_line_color = None
-        p.axis.major_label_text_font_size = "7px"
-        p.axis.major_label_standoff = 0
-        p.xaxis.major_label_orientation = 1.0
-
-        show(p)
 
 sta211 = STA211()
 sta211.word_embedding(False)
 sta211.tweets_2_vectors(False)
 sta211.som(False)
-sta211.micro_analysis(True)
+sta211.plotting_clusters(False)
+sta211.micro_analysis(False)
+sta211.hierarchicalClustering(True)
